@@ -162,6 +162,7 @@ pub struct WorkCounters {
     face_pairs: Cell<u64>,
     loops_classified: Cell<u64>,
     records_seeded: Cell<u64>,
+    wall_body_copies: Cell<u64>,
 }
 
 impl WorkCounters {
@@ -190,11 +191,20 @@ impl WorkCounters {
         self.records_seeded.get()
     }
 
+    /// Copies keep features makes of the body a feature's walls lie in (the sheet of
+    /// rounds for a boss, the target for a cut) to read the walls' boxes and creases from.
+    /// Not the fork's.
+    #[must_use]
+    pub fn wall_body_copies(&self) -> u64 {
+        self.wall_body_copies.get()
+    }
+
     /// Zeroes every count (`SmWorkCounters::Reset`).
     pub fn reset(&self) {
         self.face_pairs.set(0);
         self.loops_classified.set(0);
         self.records_seeded.set(0);
+        self.wall_body_copies.set(0);
     }
 
     /// Counts one face pair examined for intersection.
@@ -213,6 +223,12 @@ impl WorkCounters {
         let objects = u64::try_from(objects).unwrap_or(u64::MAX);
         self.records_seeded
             .set(self.records_seeded.get().saturating_add(objects));
+    }
+
+    /// Counts one copy of a body keep features reads feature walls from.
+    pub(crate) fn add_wall_body_copy(&self) {
+        self.wall_body_copies
+            .set(self.wall_body_copies.get().saturating_add(1));
     }
 }
 
@@ -1945,17 +1961,20 @@ mod tests {
     fn work_counters_count_until_reset() {
         let k = Kernel::default();
         let w = &k.work_counters;
-        let counts = |w: &WorkCounters| (w.face_pairs(), w.loops_classified(), w.records_seeded());
-        assert_eq!(counts(w), (0, 0, 0));
+        let counts = |w: &WorkCounters| {
+            (w.face_pairs(), w.loops_classified(), w.records_seeded(), w.wall_body_copies())
+        };
+        assert_eq!(counts(w), (0, 0, 0, 0));
         w.add_face_pair();
         w.add_face_pair();
         w.add_loop_classified();
         w.add_records_seeded(5);
-        assert_eq!(counts(w), (2, 1, 5));
+        w.add_wall_body_copy();
+        assert_eq!(counts(w), (2, 1, 5, 1));
         // each kernel counts its own work
         assert_eq!(Kernel::default().work_counters.face_pairs(), 0);
         w.reset();
-        assert_eq!(counts(w), (0, 0, 0));
+        assert_eq!(counts(w), (0, 0, 0, 0));
     }
 
     #[test]
