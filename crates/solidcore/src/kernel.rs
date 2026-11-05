@@ -1962,7 +1962,12 @@ mod tests {
         let k = Kernel::default();
         let w = &k.work_counters;
         let counts = |w: &WorkCounters| {
-            (w.face_pairs(), w.loops_classified(), w.records_seeded(), w.wall_body_copies())
+            (
+                w.face_pairs(),
+                w.loops_classified(),
+                w.records_seeded(),
+                w.wall_body_copies(),
+            )
         };
         assert_eq!(counts(w), (0, 0, 0, 0));
         w.add_face_pair();
