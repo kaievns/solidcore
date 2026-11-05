@@ -204,7 +204,8 @@ impl WorkCounters {
 
     /// Not the fork's: the B-rep caches (the trees of the body's vertices, edges and faces
     /// a point classification solves through, `make_brep_cache`) the `band_cuts` checks
-    /// made.
+    /// made: one per check, and another each time a tolerance of the body grew since
+    /// (the trees box each vertex, edge and face with its tolerance).
     #[must_use]
     pub fn band_brep_caches(&self) -> u64 {
         self.band_brep_caches.get()
