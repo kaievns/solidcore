@@ -148,8 +148,8 @@ impl Caches {
     }
 }
 
-/// Counts of the work done by the steps of a boolean whose cost once grew with the square
-/// of the body's size, so a test can check how that work grows: the same on every
+/// Counts of the work done by the steps of a boolean or a blend whose cost once grew with
+/// the square of the body's size, so a test can check how that work grows: the same on every
 /// machine, where a ratio of times is not (the SolidCraft fork's `SmWorkCounters`,
 /// tangency-labs/smlib@2e9e6b2 and @edf7414).
 ///
@@ -161,6 +161,7 @@ impl Caches {
 pub struct WorkCounters {
     face_pairs: Cell<u64>,
     loops_classified: Cell<u64>,
+    records_seeded: Cell<u64>,
 }
 
 impl WorkCounters {
@@ -181,10 +182,19 @@ impl WorkCounters {
         self.loops_classified.get()
     }
 
+    /// Objects a merged fillet's finish looks at to give each object of its target a
+    /// notification record before it notifies a target face (`PreEdit`, once per face): each
+    /// object the seeding visits, the B-rep's own record included. Not the fork's.
+    #[must_use]
+    pub fn records_seeded(&self) -> u64 {
+        self.records_seeded.get()
+    }
+
     /// Zeroes every count (`SmWorkCounters::Reset`).
     pub fn reset(&self) {
         self.face_pairs.set(0);
         self.loops_classified.set(0);
+        self.records_seeded.set(0);
     }
 
     /// Counts one face pair examined for intersection.
@@ -196,6 +206,13 @@ impl WorkCounters {
     pub(crate) fn add_loop_classified(&self) {
         self.loops_classified
             .set(self.loops_classified.get().saturating_add(1));
+    }
+
+    /// Counts `objects` visited to seed notification records.
+    pub(crate) fn add_records_seeded(&self, objects: usize) {
+        let objects = u64::try_from(objects).unwrap_or(u64::MAX);
+        self.records_seeded
+            .set(self.records_seeded.get().saturating_add(objects));
     }
 }
 
@@ -1733,8 +1750,8 @@ pub struct Kernel {
     /// own count, never this one.
     pub blend_operation_scopes: Arc<core::sync::atomic::AtomicU32>,
     /// Not upstream (the SolidCraft fork's `SmWorkCounters`): counts of the work done by
-    /// the steps of a boolean whose cost once grew with the square of the body's size, for
-    /// tests and profiling. They change no result.
+    /// the steps of a boolean or a blend whose cost once grew with the square of the body's
+    /// size, for tests and profiling. They change no result.
     pub work_counters: WorkCounters,
     /// Not upstream (tangency-labs/solidcore#2489): while `Some`, each fillet session that
     /// finishes filleting appends the faces it made in its target, each with what made it
@@ -1928,15 +1945,17 @@ mod tests {
     fn work_counters_count_until_reset() {
         let k = Kernel::default();
         let w = &k.work_counters;
-        assert_eq!((w.face_pairs(), w.loops_classified()), (0, 0));
+        let counts = |w: &WorkCounters| (w.face_pairs(), w.loops_classified(), w.records_seeded());
+        assert_eq!(counts(w), (0, 0, 0));
         w.add_face_pair();
         w.add_face_pair();
         w.add_loop_classified();
-        assert_eq!((w.face_pairs(), w.loops_classified()), (2, 1));
+        w.add_records_seeded(5);
+        assert_eq!(counts(w), (2, 1, 5));
         // each kernel counts its own work
         assert_eq!(Kernel::default().work_counters.face_pairs(), 0);
         w.reset();
-        assert_eq!((w.face_pairs(), w.loops_classified()), (0, 0));
+        assert_eq!(counts(w), (0, 0, 0));
     }
 
     #[test]
